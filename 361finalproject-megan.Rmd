@@ -1,0 +1,196 @@
+---
+title: "S&DS361 Final Project"
+author: "Arthur Cao, Gandhar Mahadeshwar, Megan Zhang"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(MASS)
+library(tidyverse)
+library(dplyr)
+library(class)
+library(ggplot2)
+```
+
+```{r}
+#change path
+dataset <- read_excel("1Mg2Mn_18S_human_18S_profile.xlsx")
+
+
+#modifications and positions extracted from 3D Modifications U of Albany database
+mods <- c("Am", "pseu", "pseu", "pseu", "Am", "pseu", "pseu", "Um", "pseu", 
+          "Um", "Am", "Am", "Um", "Cm", "pseu", "pseu", "pseu", "Um", "Gm", 
+          "Cm", "Am", "Am", "Gm", "Am", "Cm", "pseu", "Am", "Am", "Gm", "pseu",
+          "Um", "Gm", "pseu", "pseu", "Am", "pseu", "Gm", "pseu", "Cm", "Um", 
+          "pseu", "pseu", "pseu", "pseu", "pseu", "pseu", "Gm", "pseu", "pseu", 
+          "pseu", "Am", "pseu", "pseu", "pseu", "pseu", "pseu", "m1acp3Y", "Cm", 
+          "Um", "pseum", "Gm", "pseu", "pseu", "Am", "Cm", "Um", "pseu", "Gm", 
+          "pseu", "m7G", "pseu", "Am", "pseu", "Cm", "Um", "m6A", "m62A", "m62A")
+
+nums <- c(27, 44, 46, 93, 99, 105, 109, 116, 119, 121, 159, 166, 172, 174, 210,
+          218, 406, 428, 436, 462, 468, 484, 509, 512, 517, 572, 576, 590, 601, 
+          609, 627, 644, 659, 651, 668, 681, 683, 686, 797, 799, 801, 814, 815,
+          822, 863, 866, 867, 918, 966, 1004, 1031, 1056, 1081, 1174, 1238, 1244, 
+          1248, 1272, 1288, 1326, 1328, 1347, 1367, 1383, 1391, 1442, 1445, 1490,
+          1625, 1639, 1643, 1678, 1692, 1703, 1804, 1832, 1850, 1851)
+
+#intersperse modifications with labels of "none" to create a vector with same size as dataset
+modvector <- rep("none", dim(dataset)[1])
+allmods <- rep("none", dim(dataset)[1])
+k <- 1
+for (h in nums) {
+  modvector[h] <- mods[k]
+  allmods[h] <- "modified"
+  k <- k + 1
+}
+
+#bind vector of modifications onto the beginning of our dataset
+new <- cbind(modvector, dataset)
+new <- cbind(allmods, new)
+
+#now, we remove the unnecessary columns (cataloguing information we are not going to use)
+#also, renaming columns for clarity (...modified... -> ...Mn...)
+new.filtered <- new %>% select(-ends_with("mapped_depth")) %>% select(-ends_with("read_depth")) %>% 
+  select(-starts_with("Denatured")) %>% select(-ends_with("profile")) %>% select(-ends_with("err")) %>%
+  rename(
+    Mn_mutations = Modified_mutations,
+    Mn_effective_depth = Modified_effective_depth,
+    Mn_rate = Modified_rate,
+    Modifications = modvector,
+    AllModifications = allmods
+    )
+
+#our updated and filtered dataset
+new.filtered
+
+```
+
+
+
+
+```{r}
+plot <- ggplot(data = new.filtered, mapping = aes(x = Mn_rate, y = Untreated_rate, col = AllModifications)) 
+
+plot + geom_point() + xlim(0, 0.10) + ylim(0, 0.05) + geom_smooth(method = "lm")
+plot + geom_point() + geom_smooth(method = "lm")
+```
+
+
+
+Distribution of mutations?
+
+```{r}
+modified <- new.filtered %>% filter(AllModifications == "modified")
+
+mean(modified$Mn_rate)
+mean(modified$Untreated_rate)
+t.test(modified$Mn_rate, modified$Untreated_rate, alternative = "greater")
+
+unmodified <- new.filtered %>% filter(AllModifications == "none")
+
+
+mean(unmodified$Mn_rate)
+mean(unmodified$Untreated_rate)
+t.test(unmodified$Mn_rate, unmodified$Untreated_rate, alternative = "greater")
+```
+
+Method for removing outliers?
+
+Looking at distribution of mutation rate for modified regions
+```{r}
+modified_experimental_outliers <- boxplot(modified$Mn_rate, plot = FALSE)$out
+modified_experimental_outliersrm <- modified[-which(modified$Mn_rate %in% modified_experimental_outliers),]
+dim(modified_experimental_outliersrm)
+
+
+boxplot(modified_experimental_outliersrm$Mn_rate)
+hist(modified_experimental_outliersrm$Mn_rate, nclass = 20)
+
+modified_control_outliers <- boxplot(modified$Untreated_rate, plot = FALSE)$out
+modified_control_outliersrm <- modified[-which(modified$Untreated_rate %in% modified_control_outliers),]
+boxplot(modified_control_outliersrm$Untreated_rate)
+hist(modified_control_outliersrm$Untreated_rate, nclass = 20)
+```
+
+
+
+Looking at distribution of mutation rate for unmodified regions
+
+```{r}
+unmodified_experimental_outliers <- boxplot(unmodified$Mn_rate, plot = FALSE)$out
+sort(unmodified_experimental_outliers)
+unmodified_experimental_outliersrm <- unmodified[-which(unmodified$Mn_rate %in% unmodified_experimental_outliers),]
+
+
+boxplot(unmodified_experimental_outliersrm$Mn_rate)
+hist(unmodified_experimental_outliersrm$Mn_rate, nclass = 20)
+
+unmodified_control_outliers <- boxplot(unmodified$Untreated_rate, plot = FALSE)$out
+unmodified_control_outliersrm <- unmodified[-which(unmodified$Untreated_rate %in% unmodified_control_outliers),]
+sort(unmodified_control_outliers)
+boxplot(unmodified_control_outliersrm$Untreated_rate)
+hist(unmodified_control_outliersrm$Untreated_rate, nclass = 20)
+```
+
+
+Logistic Regression
+
+```{r}
+logdata <- new.filtered %>% select(AllModifications, Mn_rate, Untreated_rate) %>%filter(Mn_rate < 0.015, Untreated_rate < 0.015) #filter(Mn_rate < 0.010022, Untreated_rate < 0.000855)
+
+allmods <- gsub("none", 0, logdata$AllModifications)
+allmods <- gsub("modified", 1, allmods)
+
+logdata$AllModifications <- as.numeric(allmods)
+logdata
+
+plot(logdata$AllModifications ~ logdata$Mn_rate)
+plot(logdata$AllModifications ~ logdata$Untreated_rate)
+```
+
+```{r}
+logdata %>% ggplot(aes(Mn_rate, AllModifications)) +geom_point() + geom_smooth(method = "loess")
+logdata %>% ggplot(aes(Untreated_rate, AllModifications))+ geom_point()  + geom_smooth(method = "loess")
+```
+
+Logistic Regression based on class notes
+
+```{r}
+hm1 <- glm(AllModifications ~ Mn_rate + Untreated_rate, family = binomial, logdata) 
+
+#hm2 <- glm(AllModifications ~ Mn_rate, family = binomial, logdata) 
+
+summary(hm1)
+
+```
+
+```{r}
+sumary(hm1)
+```
+
+```{r}
+1- pchisq(q = 59.92470, df = 2)
+
+```
+
+```{r}
+beta <- coef(hm1)
+
+plot(jitter(AllModifications,0.1) ~ jitter(Mn_rate), data=logdata, xlab="Mn_rate", ylab="Modified",pch=".")
+
+curve(ilogit(beta[1] + beta[2]*x + beta[3]*0), add = TRUE)
+curve(ilogit(beta[1] + beta[2]*x + beta[3]*20), add = TRUE, lty = 2, col = "red")
+```
+
+```{r}
+plot(jitter(AllModifications,0.1) ~ jitter(Untreated_rate), data=logdata, xlab="Mn_rate", ylab="Modified",pch=".")
+
+curve(ilogit(beta[1] + beta[2]*0 + beta[3]*x), add = TRUE)
+curve(ilogit(beta[1] + beta[2]*20+ beta[3]*x), add = TRUE, lty = 2, col = "red")
+```
+
